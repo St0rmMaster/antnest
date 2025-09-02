@@ -1,6 +1,6 @@
 # Секреты
 
-## MariaDB (root)
+## Proxmox PVE (root)
 - **lxc-110-databases**: GqQ-4p9-zG3-XZk
 - **lxc-120-n8n**: h4j-VLN-NdN-Avj
 - **lxc-130**: w32-SQUL-3TY-BeW
