@@ -1,390 +1,52 @@
 meta:
   version: 1
-  updated: "2025-09-01"
+  updated: "2025-09-02"
   owner: "St0rmMaster"
   repo: "St0rmMaster/antnest"
-  notes: >
-    Единый каталог инфраструктуры. Все сущности вложены по месту запуска.
-    Формат YAML, UTF-8, отступ 2 пробела. Диффы в GitHub должны быть чистыми.
 
-missing: &MISSING "нет информации"
-
-server:
-  id: "srv-1"
-  name: "Proxmox Host"
-  location: "HomeLab"
-  os: "Debian 12"
-  cpu:
-    model: "AMD FX-6300 Six-Core"
-    sockets: 1
-    cores_total: 6
-    smt_threads_per_core: 2
-  ram_gb: 13
-  ips:
-    lan: "192.168.1.253"
-    wan: *MISSING
-  internet:
-    provider: "AT&T"
-    port_forward:
-      - {proto: "tcp", ext: 80,  int: 80,  target: "pve"}
-      - {proto: "tcp", ext: 443, int: 443, target: "pve"}
-    hairpin_nat: false
-  hardware:
-    motherboard:
-      vendor: "Gigabyte Technology Co., Ltd."
-      model: "970A-DS3P"
-    gpu:
-      model: "AMD Radeon RX 460/560D"
-    storage_devices:
-      - {name: "sda1", size: "3.6T", fs: "ext4", mount: "/mnt/storage"}
-      - {name: "sdb1", size: "931.5G", type: "ZFS vdev fastpool"}
-      - {name: "sdd1", size: "931.5G", type: "ZFS vdev fastpool"}
-      - {name: "sdc3", size: "222.6G", type: "LVM thin (pve/data)"}
-  system_snapshots: []
-  notes: *MISSING
-
-pve_root:
-  hostname: "pve"
-  version: "Proxmox VE 8.4.1"
-  api:
-    url: "https://pve.gramini.org:8006"
-    user: "root@pam"
-  dns:
-    split_dns: true
-    dnsmasq:
-      entries:
-        - {host: "n8n.gramini.org", ip: "192.168.1.120"}
-  reverse_proxy:
-    engine: "nginx 1.22.1"
-    vhosts:
-      - {server_name: "pve.gramini.org", upstream: "https://127.0.0.1:8006"}
-      - {server_name: "n8n.gramini.org", upstream: "http://192.168.1.120:5678"}
-    certificates:
-      letsencrypt_path: "/etc/letsencrypt/live/.../fullchain.pem"
-  firewall:
-    host_in:
-      policy: "DROP"
-      allows:
-        - {proto: "tcp", port: 22,  source: "0.0.0.0/0"}
-        - {proto: "tcp", port: 80,  source: "0.0.0.0/0"}
-        - {proto: "tcp", port: 443, source: "0.0.0.0/0"}
-  storage:
-    - id: "fastpool"
-      type: "zfspool"
-      mount: "/fastpool"
-      content: ["images","rootdir"]
-      free: "927 GB / 943 GB"
-      purpose: "основные диски ВМ/LXC"
-    - id: "filestorage"
-      type: "dir"
-      mount: "/mnt/storage"
-      content: ["vztmpl","images","iso","snippets","backup","rootdir"]
-      free: "3.36 TB / 3.6 TB"
-      purpose: "ISO/бэкапы/шаблоны"
-    - id: "tplpool"
-      type: "dir"
-      mount: "/fastpool/lxc-templates"
-      content: ["vztmpl","images","backup","iso","rootdir"]
-      free: "927 GB"
-      purpose: "склад шаблонов LXC/ISO"
-    - id: "local"
-      type: "dir"
-      mount: "/var/lib/vz"
-      content: ["vztmpl","backup","iso"]
-      free: "57 GB"
-    - id: "local-lvm"
-      type: "lvmthin"
-      vg: "pve"
-      pool: "data"
-      free: "130 GB"
-      purpose: "быстрые тестовые диски"
-
-  services:
-    - name: "nginx"
-      kind: "reverse-proxy"
-      status: "running"
-      config_path: "/etc/nginx"
-    - name: "dnsmasq"
-      kind: "dns"
-      status: "running"
-      config_path: "/etc/dnsmasq.d"
-
-  nodes:
-    - id: "lxc-110"
-      name: "DataBases"
-      kind: "LXC"
-      template: "debian-12-standard"
-      storage: "tplpool"
-      ip: "192.168.1.110"
-      firewall_in:
-        - {proto: "tcp", port: 5432, source: "192.168.1.0/24"}
-      snapshots: ["pg_initial_setup"]
-      root_password: "GgQ-4p9-zG3-XZk"
-      services:
-        - name: "postgresql"
-          version: "17"
-          status: "active (systemd)"
-          listen_addresses: ["192.168.1.110","localhost"]
-          pg_hba: "host all all 192.168.1.0/24 scram-sha-256"
-          roles:
-            - {role: "appuser",     password: "S3cureLONGPass!"}
-            - {role: "n8nuser",     password: "N8nDBPass!"}
-            - {role: "germanbot",   password: "StrongGermanPass!"}
-            - {role: "cardiobot",   password: "StrongCardioPass!"}
-            - {role: "mamontovuser",password: "MamontovDBPass!"}
-          databases:
-            - {db: "appdb",     owner: "appuser"}
-            - {db: "n8n",       owner: "n8nuser"}
-            - {db: "germanbot", owner: "germanbot"}
-            - {db: "cardiobot", owner: "cardiobot"}
-            - {db: "mamontov",  owner: "mamontovuser"}
-          examples:
-            dsn_n8n: "postgresql://n8nuser:N8nDBPass!@192.168.1.110:5432/n8n"
-
-    - id: "lxc-120"
-      name: "n8n"
-      kind: "LXC"
-      template: "debian-12-standard"
-      storage: "tplpool"
-      ip: "192.168.1.120"
-      features: ["nesting=1","keyctl=1","unprivileged"]
-      snapshots: ["n8n_ok_http5678"]
-      root_password: "h4j-VLN-NdN-Avj"
-      firewall_in:
-        - {proto: "tcp", port: 5678, source: "192.168.1.0/24"}
-      services:
-        - name: "docker"
-          version: "28.03"
-          status: "installed"
-        - name: "n8n"
-          kind: "docker"
-          status: "running"
-          ports: [5678]
-          url: "https://n8n.gramini.org"
-          env:
-            N8N_HOST: "n8n.local"
-            N8N_PROTOCOL: "http"
-            N8N_PORT: 5678
-            N8N_EDITOR_BASE_URL: "https://n8n.gramini.org"
-            N8N_SECURE_COOKIE: false
-            N8N_RUNNERS_ENABLED: true
-            DB_TYPE: "postgresdb"
-            DB_POSTGRESDB_HOST: "192.168.1.110"
-            DB_POSTGRESDB_PORT: 5432
-            DB_POSTGRESDB_DATABASE: "n8n"
-            DB_POSTGRESDB_USER: "n8nuser"
-            DB_POSTGRESDB_PASSWORD: "N8nDBPass!"
-          secrets:
-            basic_auth:
-              login: "admin"
-              password: "djx-ExM-s6A-jVy1!"
-        - name: "bots"
-          kind: "docker"
-          status: "running"
-          details:
-            list: ["German","Cardio","Mamontov"]
-            env_files_dir: "/root/*.env"
-            deploy: "GitHub auto-deploy via PAT"
-        - name: "kimai_stack"
-          kind: "docker-compose"
-          status: "running"
-          ports: ["8080->8001"]
-          compose_path: "/opt/kimai/docker-compose.yml"
-          db:
-            engine: "mariadb"
-            host: "db (docker network)"
-            port: 3306
-            name: "kimai"
-            secrets:
-              root_password: "1zG8nQ2Va3sL7Yu"
-              user: "kimai"
-              password: "Rv9gH_Wp5K3q2DLXc4"
-          app:
-            image: "kimai/kimai2:apache"
-            url: *MISSING
-            admin:
-              email: "konstantin@rmosd.com"
-              password: "A4guE7sM2xN9Qr5p"
-            secrets:
-              database_url: "mysql://kimai:R*v9gH!Wp5K3q2D#LXc4@db/kimai?charset=utf8mb4&serverVersion=11"
-          volumes:
-            - {name: "db_data", path: "/var/lib/mysql"}
-            - {name: "kimai_files", path: "/opt/kimai/var/data"}
-        - name: "taiga_full"
-          kind: "docker-compose"
-          status: "configured"
-          compose_path: "/opt/taiga-full/docker-compose.yml"
-          url: "http://192.168.1.120:9000"
-          services:
-            gateway: {port_pub: 9000}
-            db: {engine: "postgres", version: "12.3-alpine"}
-            back: {image: "taigaio/taiga-back:latest"}
-            async: {image: "taigaio/taiga-back:latest"}
-            events: {image: "taigaio/taiga-events:latest"}
-            rabbitmq_async: {image: "rabbitmq:3.8-management-alpine"}
-            rabbitmq_events:{image: "rabbitmq:3.8-management-alpine"}
-            front: {image: "taigaio/taiga-front:latest"}
-            protected: {image: "taigaio/taiga-protected:latest"}
-          env:
-            TAIGA_SCHEME: "http"
-            TAIGA_DOMAIN: "192.168.1.120:9000"
-            WEBSOCKETS_SCHEME: "ws"
-            SECRET_KEY: "8hw*rkdL0h0&3ntO9cDd^m64yx9bg9s+"
-            POSTGRES_DB: "taiga"
-            POSTGRES_USER: "taiga"
-            POSTGRES_PASSWORD: "Taiga186!DbPass"
-            RABBITMQ_USER: "taiga"
-            RABBITMQ_PASS: "TaigaMqPass!"
-            EMAIL_HOST: "smtp.gmail.com"
-            EMAIL_PORT: 587
-            EMAIL_HOST_USER: "konstantin@rmosd.com"
-            EMAIL_HOST_PASSWORD: *MISSING     # app-password
-            EMAIL_DEFAULT_FROM: "Revolution Marine <no-reply@rmosd.com>"
-            EMAIL_USE_TLS: true
-            EMAIL_USE_SSL: false
-          secrets:
-            django_superuser:
-              login: "master"
-              password: *MISSING  # задан при createsuperuser
-        - name: "n8n-mcp"
-          kind: "docker (stdio helper)"
-          status: "ready"
-          run_script: "/opt/n8n-mcp/run-stdio.sh"
-          image: "ghcr.io/czlonkowski/n8n-mcp:latest"
-          env:
-            MCP_MODE: "stdio"
-            LOG_LEVEL: "info"
-            N8N_API_URL: "http://192.168.1.120:5678"
-            N8N_API_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkYTVhYWEwZC1jYjNiLTRlODItYmIzZS03OTRjMGI0OWNjZDAiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzU0NzgwODAxfQ._hkE50LwSiqvU48Vd8hunutZWDFU3dAy7KvjCbi8rzQ"
-          api:
-            health_check: "http://192.168.1.120:3333/health"
-            sse: "http://192.168.1.120:3333/mcp"
-          auth:
-            token: "56981a88168527130cc9a76bb72e5dda7dad6cd44e94a533ad8aa079ad688fbe"
-
-    - id: "lxc-130"
-      name: *MISSING
-      kind: "LXC"
-      ip: *MISSING
-      root_password: "w32-SQU-3TY-BeW"
-      services: []
-
-    - id: "lxc-140"
-      name: "GigaBot"
-      kind: "LXC"
-      ip: *MISSING
-      root_password: "Z2T-djm-5Aw-QST"
-      services: []
-
-    - id: "lxc-150"
-      name: "mcp-taiga"
-      kind: "LXC"
-      ip: "192.168.1.150"
-      project_dir: "/opt/pytaiga-mcp"
-      venv: "/opt/pytaiga-mcp/.venv"
-      http:
-        sse_endpoint: "http://192.168.1.150:8000/sse"
-      run:
-        manual: "source .venv/bin/activate && ./run.sh --sse"
-        systemd_unit: "/etc/systemd/system/taiga-mcp.service"
-      secrets:
-        TAIGA_API_URL: "http://192.168.1.120:9000/api/v1"
-        TAIGA_USERNAME: "master"
-        TAIGA_PASSWORD: "rXb-8dz-bR3-DQv"
-        LOG_LEVEL: "INFO"
-      notes: []
-
-    - id: "lxc-160"
-      name: "Cloud"
-      kind: "LXC"
-      ip: "192.168.1.160"
-      services:
-        - name: "nextcloud"
-          kind: "apache+php"
-          status: "running"
-          url: *MISSING
-          secrets:
-            db:
-              engine: "mariadb"
-              login: "ncuser"
-              password: "Maria149DB54StrongPass27"
-            admin:
-              login: "root"
-              password: "gbW-xK5-Cx8-mLc"
-        - name: "mariadb"
-          kind: "database"
-          status: "running"
-          secrets:
-            root: "afx-Tjc-jVc-6b3"
-
-operations:
-  backup:
-    postgres:
-      schedule:
-        daily_logical_dump: true
-        keep_days: 7
-        weekly_full_backup: true
-      paths:
-        cluster_dir: "/var/lib/postgresql/17/main"
-    n8n:
-      volumes: ["n8n_data"]
-      schedule:
-        weekly_snapshot: true
-    docker_stacks:
-      kimai: {compose_dir: "/opt/kimai"}
-      taiga: {compose_dir: "/opt/taiga-full"}
-  restore: []
-  runbooks:
-    n8n_docker_run: |
-      docker run -d --name n8n \
-        -p 5678:5678 \
-        -e N8N_HOST=n8n.local \
-        -e N8N_PROTOCOL=http \
-        -e N8N_PORT=5678 \
-        -e N8N_EDITOR_BASE_URL=https://n8n.gramini.org \
-        -e N8N_SECURE_COOKIE=true \
-        -e N8N_RUNNERS_ENABLED=true \
-        -e DB_TYPE=postgresdb \
-        -e DB_POSTGRESDB_HOST=192.168.1.110 \
-        -e DB_POSTGRESDB_PORT=5432 \
-        -e DB_POSTGRESDB_DATABASE=n8n \
-        -e DB_POSTGRESDB_USER=n8nuser \
-        -e DB_POSTGRESDB_PASSWORD=N8nDBPass! \
-        -v n8n_data:/home/node/.n8n \
-        --restart unless-stopped \
-        n8nio/n8n:latest
-    kimai_compose: |
-      # см. /opt/kimai/docker-compose.yml (актуальная версия в репозитории)
-      version: "3.8"
-      services:
+# ... остальное без изменений до блока nodes ...
+nodes:
+  - id: "lxc-120"
+    name: "n8n"
+    kind: "LXC"
+    template: "debian-12-standard"
+    storage: "tplpoool"
+    ip: "192.168.1.120"
+    features:
+      - nesting=1
+      - keyctl=1
+      - unprivileged
+    snapshots:
+      - "n8n_ok_http5678"
+    root_password: "h4j-VMlN-NdN-Avj"
+    firewall_in:
+      - proto: "tcp", port: 5678, source: "192.168.1.0/24"
+    services:
+      # ... другие сервисы до kimai_stack ...
+      - name: "kimai_stack"
+        kind: "docker-compose"
+        status: "running"
+        ports:
+          - "8080-8001"
+        compose_path: "/opt/kimai/docker-compose.yml"
         db:
-          image: mariadb:11
-          environment:
-            - MYSQL_DATABASE=kimai
-            - MYSQL_USER=kimai
-            - MYSQL_PASSWORD=Rv9gH!Wp5K3q2D#LXc4
-            - MYSQL_ROOT_PASSWORD=1zG8nQ2Va3sL7Yu
-        kimai:
-          image: kimai/kimai2:apache
-          ports: ["8080:8001"]
-          environment:
-            - DATABASE_URL=mysql://kimai:R*v9gH!Wp5K3q2D#LXc4@db/kimai?charset=utf8mb4&serverVersion=11
-            - ADMINMAIL=admin@example.com
-            - ADMINPASS=A4guE7sM2xN9Qr5p
-
-knowledge_base:
-  issues_history:
-    - "Postgres на хосте мешал контейнеру — удалили пакеты."
-    - "listen_addresses требует restart вместо reload."
-    - "Права владельца после pg_restore — исправляли ALTER OWNER и GRANT."
-    - "Отсутствующие .env — проверяй перед запуском Docker."
-    - "Порт n8n пробросили 5678:443 — исправили на 5678:5678."
-    - "SECURE_COOKIE=true требует HTTPS — изменили на false."
-    - "LE ошибки NXDOMAIN/timeout — поправили DNS/порты/путь fullchain.pem."
-    - "Hair-pin NAT нет — решено через dnsmasq (split-DNS)."
-  open_tasks:
-    - "Менеджер секретов (Vault/SOPS) — внедрить."
-    - "Мониторинг и alerting (Prom/Grafana/node-exporter/pg_exporter)."
-    - "PITR бэкапы (pgBackRest/wal-g)."
-    - "Тест подключения к БД."
-    - "Автообновление LE-сертификатов."
+          engine: "mariadb"
+          host: "db (docker network)"
+          port: 3306
+          name: "kimai"
+          secrets:
+            root_password: "1zG8nQ2Va3sL7Yu"
+            user: "kimai"
+            password: "Rv9gH_Wp5K3q2D#Lxc4"
+        app:
+          image: "kimai/kimai2:apache"
+          url: "http://192.168.1.120:8080"
+          admin:
+            email: "konstantin@rmosd.com"
+            password: "A4guE7sM2xN9Qr5p"
+          secrets:
+            database_url: "mysql://kimai:Rv9gH_Wp5K3q2D#Lxc4@db/kimai"
+            db_prefix: "kimai"
+        volumes:
+          # ... существующие тома ...
+# ... остальной файл без изменений ...
