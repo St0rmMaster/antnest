@@ -25,10 +25,25 @@ async def debug_task(request: TaskRequest) -> dict:
     initial_state = {
         "task_spec": request.task_spec,
         "plan": None,
+        "clarifying_questions": None,
         "status": "new"
     }
     result = graph.invoke(initial_state)
     return result
+
+
+@app.post("/tasks/clarify")
+async def clarify(request: TaskRequest) -> dict[str, list[str]]:
+    """Получить список уточняющих вопросов по задаче."""
+    initial_state = {
+        "task_spec": request.task_spec,
+        "plan": None,
+        "clarifying_questions": None,
+        "status": "new"
+    }
+    state = graph.invoke(initial_state)
+    questions = state.get("clarifying_questions") or []
+    return {"clarifying_questions": questions}
 
 
 def main() -> None:
